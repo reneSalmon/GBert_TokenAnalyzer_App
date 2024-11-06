@@ -329,11 +329,11 @@ def main():
                             st.write(f"- Split '{compound['word']}' into its components or use a simpler alternative")
                         elif len(compound['tokens']) > 2:
                             st.write(f"- Consider breaking '{compound['word']}' into shorter words")
-    else:
-        st.write("No compound words detected.")
+                else:
+                    st.write("No compound words detected.")
 
         else:
             st.warning("Please enter some text to analyze.")
 
 if __name__ == "__main__":
-    main()‚
+    main()
