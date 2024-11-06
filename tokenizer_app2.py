@@ -7,14 +7,12 @@ import math
 import pandas as pd
 import re
 from typing import Dict, List
+from split_words import Splitter
 
 # Load the model's tokenizer
 pretrained_weights = 'deepset/gbert-large'
 tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
 
-# Add NLTK download
-import nltk
-nltk.download('punkt')
 
 def calculate_shannon_entropy(token_list):
     """Calculates the Shannon entropy of a given text."""
@@ -39,10 +37,11 @@ class TextQualityAnalyzer:
         self.tokenizer = tokenizer
         self.anglicisms = ['cool', 'nice', 'fancy', 'update', 'queen', 'hollywood']
         self.complex_word_threshold = 3
+        self.splitter = Splitter()
         self.compound_markers = {
             'linking_elements': ['s', 'es', 'n', 'en', 'er', 'e'],
-            'common_heads': ['stelle', 'haus', 'zeit', 'raum', 'mann', 'frau', 'kind'],
-            'common_modifiers': ['haupt', 'grund', 'zeit', 'hand', 'land']
+           'common_heads': ['stelle', 'haus', 'zeit', 'raum', 'mann', 'frau', 'kind'],
+           'common_modifiers': ['haupt', 'grund', 'zeit', 'hand', 'land']
         }
         self.konfixes = ['tragi', 'komödie', 'bio', 'geo', 'phil', 'tele', 'therm', 'graph',
         'phon', 'log', 'path', 'psych', 'trag', 'kom', 'techno', 'haupt',
@@ -133,24 +132,32 @@ class TextQualityAnalyzer:
         }
 
     def check_compounds(self, text: str) -> Dict:
-        words = text.split()
+        words = [w for w in text.split() if len(w) > 10]
         potential_compounds = []
 
         for word in words:
-            # Remove punctuation and special characters
             clean_word = re.sub(r'[.,!?]', '', word)
 
-            # Skip hyphenated words and short words
-            if '-' in clean_word or len(clean_word) < 5:
+            if '-' in clean_word:
                 continue
 
-            # Check for actual German compounds
-            if any(konfix in clean_word.lower() for konfix in self.konfixes):
-                tokens = self.tokenizer.tokenize(clean_word)
+            # Kombiniere BERT und split-words Analyse
+            bert_tokens = self.tokenizer.tokenize(clean_word)
+            split_result = self.splitter.split_compound(clean_word)
+
+            if split_result and split_result[0][0] > 0:  # Gültige Zerlegung gefunden
                 compound_info = {
                     'word': clean_word,
-                    'tokens': tokens,
-                    'type': self._determine_compound_type(clean_word, tokens)
+                    'bert_tokens': bert_tokens,
+                    'split_components': {
+                        'probability': split_result[0][0],
+                        'parts': [split_result[0][1], split_result[0][2]]
+                    },
+                    'alternatives': [
+                        {'probability': prob, 'parts': [part1, part2]}
+                        for prob, part1, part2 in split_result[1:3]
+                    ],
+                    'type': self._determine_compound_type(clean_word)
                 }
                 potential_compounds.append(compound_info)
 
@@ -327,25 +334,33 @@ def main():
             # Compound Word Check
             with st.expander(f"Zusammengesetzte Wörter - {'✅' if not analysis['quality_checks'][6]['compounds'] else '❌'}"):
                 st.write("**Required:** Analysis of German compound words")
-                compound_check = analysis['quality_checks'][6]  # Get the compound check results
+                compound_check = analysis['quality_checks'][6]
                 compounds = compound_check.get('compounds', [])
 
                 if compounds:
-                    st.write(f"\n⚠️ **Found Compounds:** ({len(compounds)} instances)")
+                    st.write(f"\n⚠️ **Gefundene Komposita:** ({len(compounds)} instances)")
                     for i, compound in enumerate(compounds, 1):
-                        st.write(f"{i}. **{compound['word']}**")
-                        st.write(f"   - Type: {compound['type']}")
-                        st.write(f"   - Components: {' + '.join(compound['tokens'])}")
+                        st.write(f"\n{i}. **{compound['word']}**")
+                        st.write(f"**Typ:** {compound['type']}")
+                        st.write("**Beste Zerlegung:**")
+                        st.write(f"- Wahrscheinlichkeit: {compound['split_components']['probability']:.2f}")
+                        st.write(f"- Komponenten: {' + '.join(compound['split_components']['parts'])}")
 
-                    st.write("\n💡 **Recommendation:**")
-                    st.write("Consider simplifying complex compounds:")
+                        if compound['alternatives']:
+                            st.write("**Alternative Zerlegungen:**")
+                            for alt in compound['alternatives']:
+                                st.write(f"- ({alt['probability']:.2f}): {' + '.join(alt['parts'])}")
+
+                        st.write("**BERT Tokenisierung:**", ' + '.join(compound['bert_tokens']))
+                        st.write("---")
+
+                    st.write("\n💡 **Empfehlungen:**")
                     for compound in compounds:
-                        if compound['type'] == "Konfixkompositum":
-                            st.write(f"- Split '{compound['word']}' into its components or use a simpler alternative")
-                        elif len(compound['tokens']) > 2:
-                            st.write(f"- Consider breaking '{compound['word']}' into shorter words")
+                        if compound['split_components']['probability'] < 0.5:
+                            st.write(f"- '{compound['word']}' könnte in seine Bestandteile zerlegt werden: "
+                                    f"{' + '.join(compound['split_components']['parts'])}")
                 else:
-                    st.write("✅ No compound words detected.")
+                    st.write("✅ Keine Komposita gefunden.")
 
         else:
             st.warning("Please enter some text to analyze.")
