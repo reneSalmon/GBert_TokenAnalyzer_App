@@ -44,8 +44,9 @@ class TextQualityAnalyzer:
             'common_heads': ['stelle', 'haus', 'zeit', 'raum', 'mann', 'frau', 'kind'],
             'common_modifiers': ['haupt', 'grund', 'zeit', 'hand', 'land']
         }
-        self.konfixes = ['bio', 'geo', 'phil', 'tele', 'therm', 'graph', 'phon',
-                        'log', 'path', 'psych', 'trag', 'kom', 'techno']
+        self.konfixes = ['tragi', 'komödie', 'bio', 'geo', 'phil', 'tele', 'therm', 'graph',
+        'phon', 'log', 'path', 'psych', 'trag', 'kom', 'techno', 'haupt',
+        'dar', 'stell']
 
     def analyze_text(self, text: str) -> Dict:
         tokens = self.tokenizer.tokenize(text)
@@ -132,16 +133,24 @@ class TextQualityAnalyzer:
         }
 
     def check_compounds(self, text: str) -> Dict:
-        words = [w for w in text.split() if len(w) > 5]
+        words = text.split()
         potential_compounds = []
 
         for word in words:
-            tokens = self.tokenizer.tokenize(word)
-            if len(tokens) > 1 and not any(token.startswith('##') for token in tokens):
+            # Remove punctuation and special characters
+            clean_word = re.sub(r'[.,!?]', '', word)
+
+            # Skip hyphenated words and short words
+            if '-' in clean_word or len(clean_word) < 5:
+                continue
+
+            # Check for actual German compounds
+            if any(konfix in clean_word.lower() for konfix in self.konfixes):
+                tokens = self.tokenizer.tokenize(clean_word)
                 compound_info = {
-                    'word': word,
+                    'word': clean_word,
                     'tokens': tokens,
-                    'type': self._determine_compound_type(word, tokens)
+                    'type': self._determine_compound_type(clean_word, tokens)
                 }
                 potential_compounds.append(compound_info)
 
@@ -154,8 +163,14 @@ class TextQualityAnalyzer:
         }
 
     def _determine_compound_type(self, word: str, tokens: List[str]) -> str:
-        konfix_count = sum(1 for konfix in self.konfixes if konfix in word.lower())
-        if konfix_count >= 2:
+        word_lower = word.lower()
+
+        # Check for Konfixkomposita
+        konfix_count = sum(1 for konfix in self.konfixes if konfix in word_lower)
+
+        if 'komödie' in word_lower and any(k in word_lower for k in ['trag', 'tragi']):
+            return "Konfixkompositum (Tragikomödie)"
+        elif konfix_count >= 2:
             return "Konfixkompositum"
         elif konfix_count == 1:
             return "Konfix-Compound"
