@@ -308,8 +308,32 @@ def main():
                     st.write("- Add more detailed explanations")
                     st.write("- Use more precise vocabulary")
                     st.write("- Include more complex concepts")
+
+            # Compound Word Check
+            with st.expander(f"Zusammengesetzte Wörter - ℹ️"):
+                st.write("**Required:** Analysis of German compound words")
+                compound_check = analysis['quality_checks'][6]  # Get the compound check results
+                compounds = compound_check.get('compounds', [])
+
+                if compounds:
+                    st.write(f"\n⚠️ **Found Compounds:** ({len(compounds)} instances)")
+                    for i, compound in enumerate(compounds, 1):
+                        st.write(f"{i}. **{compound['word']}**")
+                        st.write(f"   - Type: {compound['type']}")
+                        st.write(f"   - Components: {' + '.join(compound['tokens'])}")
+
+                    st.write("\n💡 **Recommendation:**")
+                    st.write("Consider simplifying complex compounds:")
+                    for compound in compounds:
+                        if compound['type'] == "Konfixkompositum":
+                            st.write(f"- Split '{compound['word']}' into its components or use a simpler alternative")
+                        elif len(compound['tokens']) > 2:
+                            st.write(f"- Consider breaking '{compound['word']}' into shorter words")
+    else:
+        st.write("No compound words detected.")
+
         else:
             st.warning("Please enter some text to analyze.")
 
 if __name__ == "__main__":
-    main()
+    main()‚
