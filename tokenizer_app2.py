@@ -1,10 +1,13 @@
 import streamlit as st
+import nltk
+nltk.download('punkt')
 from transformers import BertTokenizer
 from nltk.probability import FreqDist
 import math
 import pandas as pd
 import re
 from typing import Dict, List
+
 
 # Load the model's tokenizer
 pretrained_weights = 'deepset/gbert-large'
