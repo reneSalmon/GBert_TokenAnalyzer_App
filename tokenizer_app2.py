@@ -310,7 +310,7 @@ def main():
                     st.write("- Include more complex concepts")
 
             # Compound Word Check
-            with st.expander(f"Zusammengesetzte Wörter - ℹ️"):
+            with st.expander(f"Zusammengesetzte Wörter - {'✅' if not analysis['quality_checks'][6]['compounds'] else '❌'}"):
                 st.write("**Required:** Analysis of German compound words")
                 compound_check = analysis['quality_checks'][6]  # Get the compound check results
                 compounds = compound_check.get('compounds', [])
@@ -330,7 +330,7 @@ def main():
                         elif len(compound['tokens']) > 2:
                             st.write(f"- Consider breaking '{compound['word']}' into shorter words")
                 else:
-                    st.write("No compound words detected.")
+                    st.write("✅ No compound words detected.")
 
         else:
             st.warning("Please enter some text to analyze.")
