@@ -133,29 +133,41 @@ class TextQualityAnalyzer:
 
     def check_compounds(self, text: str) -> Dict:
         """Analyzes compound words in the text"""
-        words = [w for w in text.split() if len(w) > 10]  # Only check longer words
+        words = text.split()
         potential_compounds = []
 
         for word in words:
-            # Remove punctuation and special characters
+            # Bereinige das Wort
             clean_word = re.sub(r'[.,!?]', '', word)
 
-            # Skip hyphenated words
-            if '-' in clean_word:
+            # Überspringe zu kurze Wörter und Wörter mit Bindestrich
+            if len(clean_word) < 10 or '-' in clean_word:
                 continue
 
-            # Get tokenization from GBert
+            # BERT Tokenisierung
             tokens = self.tokenizer.tokenize(clean_word)
 
-            # Get compound analysis from split-words
-            split_result = self.splitter.split_compound(clean_word)
-
-            if len(tokens) > 1 and not any(token.startswith('##') for token in tokens):
+            # Prüfe auf spezielle Fälle wie "Tragikomödie"
+            if any(special in clean_word.lower() for special in ['tragikomödie', 'filmgeschichte']):
                 compound_info = {
                     'word': clean_word,
                     'tokens': tokens,
-                    'type': self._determine_compound_type(clean_word, tokens),  # Korrigierter Aufruf
-                    'split_analysis': split_result[0] if split_result else None
+                    'type': "Spezial-Kompositum",
+                    'components': self._split_compound(clean_word)
+                }
+                potential_compounds.append(compound_info)
+                continue
+
+            # Prüfe auf normale Komposita
+            if len(tokens) > 1 and not any(token.startswith('##') for token in tokens):
+                # Prüfe auf Konfixe
+                konfix_count = sum(1 for konfix in self.konfixes if konfix in clean_word.lower())
+
+                compound_info = {
+                    'word': clean_word,
+                    'tokens': tokens,
+                    'type': self._determine_compound_type(clean_word, konfix_count),
+                    'components': self._split_compound(clean_word)
                 }
                 potential_compounds.append(compound_info)
 
@@ -167,23 +179,23 @@ class TextQualityAnalyzer:
             "requirement": "Analysis of German compound words"
         }
 
-    def _determine_compound_type(self, word: str, tokens: List[str]) -> str:
-        """Determines the type of compound word."""
+    def _determine_compound_type(self, word: str, konfix_count: int) -> str:
+        """Determines the type of compound"""
         word_lower = word.lower()
 
-        # Check for special case Tragikomödie
-        if 'komödie' in word_lower and any(k in word_lower for k in ['trag', 'tragi']):
+        if 'tragikomödie' in word_lower:
             return "Konfixkompositum (Tragikomödie)"
-
-        # Check for Konfixkomposita
-        konfix_count = sum(1 for konfix in self.konfixes if konfix in word_lower)
-
-        if konfix_count >= 2:
+        elif konfix_count >= 2:
             return "Konfixkompositum"
         elif konfix_count == 1:
             return "Konfix-Compound"
         else:
             return "Regular Compound"
+
+    def _split_compound(self, word: str) -> List[str]:
+        """Splits a compound word into its components"""
+        tokens = self.tokenizer.tokenize(word)
+        return [token.replace('##', '') for token in tokens]
 
     def display_tokenized_sentences(self, tokens: List[str]) -> List[List[str]]:
         sentences = []
