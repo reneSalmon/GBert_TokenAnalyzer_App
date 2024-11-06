@@ -133,41 +133,31 @@ class TextQualityAnalyzer:
 
     def check_compounds(self, text: str) -> Dict:
         """Analyzes compound words in the text"""
-        words = text.split()
+        words = [w for w in text.split() if len(w) > 10]  # Erhöhe Mindestlänge auf 10
         potential_compounds = []
 
         for word in words:
             # Bereinige das Wort
             clean_word = re.sub(r'[.,!?]', '', word)
 
-            # Überspringe zu kurze Wörter und Wörter mit Bindestrich
-            if len(clean_word) < 10 or '-' in clean_word:
+            # Überspringe Wörter mit Bindestrich
+            if '-' in clean_word:
                 continue
 
             # BERT Tokenisierung
             tokens = self.tokenizer.tokenize(clean_word)
 
-            # Prüfe auf spezielle Fälle wie "Tragikomödie"
-            if any(special in clean_word.lower() for special in ['tragikomödie', 'filmgeschichte']):
-                compound_info = {
-                    'word': clean_word,
-                    'tokens': tokens,
-                    'type': "Spezial-Kompositum",
-                    'components': self._split_compound(clean_word)
-                }
-                potential_compounds.append(compound_info)
-                continue
-
-            # Prüfe auf normale Komposita
+            # Prüfe auf Komposita
             if len(tokens) > 1 and not any(token.startswith('##') for token in tokens):
-                # Prüfe auf Konfixe
-                konfix_count = sum(1 for konfix in self.konfixes if konfix in clean_word.lower())
-
                 compound_info = {
                     'word': clean_word,
                     'tokens': tokens,
-                    'type': self._determine_compound_type(clean_word, konfix_count),
-                    'components': self._split_compound(clean_word)
+                    'type': self._determine_compound_type(clean_word),
+                    'split_components': {
+                        'probability': 1.0,  # Standard-Wahrscheinlichkeit
+                        'parts': tokens
+                    },
+                    'alternatives': []  # Leere Liste für alternative Zerlegungen
                 }
                 potential_compounds.append(compound_info)
 
@@ -179,13 +169,18 @@ class TextQualityAnalyzer:
             "requirement": "Analysis of German compound words"
         }
 
-    def _determine_compound_type(self, word: str, konfix_count: int) -> str:
-        """Determines the type of compound"""
+    def _determine_compound_type(self, word: str) -> str:
+        """Determines the type of compound word."""
         word_lower = word.lower()
 
+        # Prüfe auf spezielle Fälle
         if 'tragikomödie' in word_lower:
             return "Konfixkompositum (Tragikomödie)"
-        elif konfix_count >= 2:
+
+        # Prüfe auf Konfixe
+        konfix_count = sum(1 for konfix in self.konfixes if konfix in word_lower)
+
+        if konfix_count >= 2:
             return "Konfixkompositum"
         elif konfix_count == 1:
             return "Konfix-Compound"
@@ -355,23 +350,11 @@ def main():
                     for i, compound in enumerate(compounds, 1):
                         st.write(f"\n{i}. **{compound['word']}**")
                         st.write(f"**Typ:** {compound['type']}")
-                        st.write("**Beste Zerlegung:**")
-                        st.write(f"- Wahrscheinlichkeit: {compound['split_components']['probability']:.2f}")
-                        st.write(f"- Komponenten: {' + '.join(compound['split_components']['parts'])}")
+                        st.write("**Zerlegung:**")
+                        st.write(f"- Komponenten: {' + '.join(compound['tokens'])}")
 
-                        if compound['alternatives']:
-                            st.write("**Alternative Zerlegungen:**")
-                            for alt in compound['alternatives']:
-                                st.write(f"- ({alt['probability']:.2f}): {' + '.join(alt['parts'])}")
-
-                        st.write("**BERT Tokenisierung:**", ' + '.join(compound['bert_tokens']))
-                        st.write("---")
-
-                    st.write("\n💡 **Empfehlungen:**")
-                    for compound in compounds:
-                        if compound['split_components']['probability'] < 0.5:
-                            st.write(f"- '{compound['word']}' könnte in seine Bestandteile zerlegt werden: "
-                                    f"{' + '.join(compound['split_components']['parts'])}")
+                        if compound['type'] == "Konfixkompositum":
+                            st.write("💡 **Empfehlung:** Prüfen Sie, ob eine einfachere Alternative möglich ist.")
                 else:
                     st.write("✅ Keine Komposita gefunden.")
 
