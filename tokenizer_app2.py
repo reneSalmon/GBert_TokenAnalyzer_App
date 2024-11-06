@@ -132,32 +132,30 @@ class TextQualityAnalyzer:
         }
 
     def check_compounds(self, text: str) -> Dict:
-        words = [w for w in text.split() if len(w) > 10]
+        """Analyzes compound words in the text"""
+        words = [w for w in text.split() if len(w) > 10]  # Only check longer words
         potential_compounds = []
 
         for word in words:
+            # Remove punctuation and special characters
             clean_word = re.sub(r'[.,!?]', '', word)
 
+            # Skip hyphenated words
             if '-' in clean_word:
                 continue
 
-            # Kombiniere BERT und split-words Analyse
-            bert_tokens = self.tokenizer.tokenize(clean_word)
+            # Get tokenization from GBert
+            tokens = self.tokenizer.tokenize(clean_word)
+
+            # Get compound analysis from split-words
             split_result = self.splitter.split_compound(clean_word)
 
-            if split_result and split_result[0][0] > 0:  # Gültige Zerlegung gefunden
+            if len(tokens) > 1 and not any(token.startswith('##') for token in tokens):
                 compound_info = {
                     'word': clean_word,
-                    'bert_tokens': bert_tokens,
-                    'split_components': {
-                        'probability': split_result[0][0],
-                        'parts': [split_result[0][1], split_result[0][2]]
-                    },
-                    'alternatives': [
-                        {'probability': prob, 'parts': [part1, part2]}
-                        for prob, part1, part2 in split_result[1:3]
-                    ],
-                    'type': self._determine_compound_type(clean_word)
+                    'tokens': tokens,
+                    'type': self._determine_compound_type(clean_word, tokens),  # Korrigierter Aufruf
+                    'split_analysis': split_result[0] if split_result else None
                 }
                 potential_compounds.append(compound_info)
 
@@ -170,14 +168,17 @@ class TextQualityAnalyzer:
         }
 
     def _determine_compound_type(self, word: str, tokens: List[str]) -> str:
+        """Determines the type of compound word."""
         word_lower = word.lower()
+
+        # Check for special case Tragikomödie
+        if 'komödie' in word_lower and any(k in word_lower for k in ['trag', 'tragi']):
+            return "Konfixkompositum (Tragikomödie)"
 
         # Check for Konfixkomposita
         konfix_count = sum(1 for konfix in self.konfixes if konfix in word_lower)
 
-        if 'komödie' in word_lower and any(k in word_lower for k in ['trag', 'tragi']):
-            return "Konfixkompositum (Tragikomödie)"
-        elif konfix_count >= 2:
+        if konfix_count >= 2:
             return "Konfixkompositum"
         elif konfix_count == 1:
             return "Konfix-Compound"
