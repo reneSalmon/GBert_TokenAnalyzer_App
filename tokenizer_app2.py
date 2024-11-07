@@ -9,6 +9,7 @@ import re
 from typing import Dict, List
 import os
 from google.cloud import aiplatform
+from google.cloud.aiplatform.gapic.schema import predict
 
 # Load the smallest GBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
