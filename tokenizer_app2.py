@@ -9,7 +9,7 @@ import re
 from typing import Dict, List
 import os
 from google.cloud import aiplatform
-from google.cloud.aiplatform.gapic.schema import predict
+from vertexai.generative_models import GenerativeModel
 
 # Load the smallest GBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
@@ -40,8 +40,8 @@ class TextQualityAnalyzer:
         # Initialize Vertex AI and Gemini model
         try:
             project_id = os.getenv("lewagon-batch672")
-            aiplatform.init(project=project_id, location="us-central1")
-            self.gemini_model = aiplatform.GenerativeModel(
+            vertexai.init(project=project_id, location="us-central1")
+            self.gemini_model = GenerativeModel(
                 model_name="gemini-1.5-flash-002",
                 generation_config={
                     "temperature": 0,     # Most deterministic output
