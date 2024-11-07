@@ -9,6 +9,7 @@ import re
 from typing import Dict, List
 import os
 from google.cloud import aiplatform
+import vertexai
 from vertexai.generative_models import GenerativeModel
 
 # Load the smallest GBERT tokenizer
