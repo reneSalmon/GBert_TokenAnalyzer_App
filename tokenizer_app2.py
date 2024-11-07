@@ -15,6 +15,32 @@ from vertexai.generative_models import GenerativeModel
 # Load the smallest GBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
 
+# Cache the model initialization
+@st.cache_resource
+def initialize_gemini():
+    try:
+        # Set your project ID directly
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "lewagon-batch672"
+
+        # Initialize vertexai with explicit project ID
+        vertexai.init(
+            project="lewagon-batch672",
+            location="us-central1"
+        )
+
+        return GenerativeModel(
+            model_name="gemini-1.5-flash-002",
+            generation_config={
+                "temperature": 0,
+                "top_k": 1,
+                "top_p": 0.1,
+                "max_output_tokens": 1024
+            }
+        )
+    except Exception as e:
+        st.error(f"Error initializing Vertex AI: {str(e)}")
+        return None
+
 def calculate_shannon_entropy(token_list):
     """Calculates the Shannon entropy of a given text."""
     freq_dist = FreqDist(token_list)
@@ -37,23 +63,7 @@ class TextQualityAnalyzer:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self.complex_word_threshold = 3
-
-        # Initialize Vertex AI and Gemini model
-        try:
-            project_id = os.getenv("lewagon-batch672")
-            vertexai.init(project=project_id, location="us-central1")
-            self.gemini_model = GenerativeModel(
-                model_name="gemini-1.5-flash-002",
-                generation_config={
-                    "temperature": 0,     # Most deterministic output
-                    "top_k": 1,          # Only most probable token
-                    "top_p": 0.1,        # Highest probability tokens
-                    "max_output_tokens": 1024
-                }
-            )
-        except Exception as e:
-            st.error(f"Error initializing Vertex AI: {str(e)}")
-            self.gemini_model = None
+        self.gemini_model = initialize_gemini()
 
     def analyze_text(self, text: str) -> Dict:
         tokens = self.tokenizer.tokenize(text)
