@@ -1,18 +1,18 @@
 import streamlit as st
 import nltk
 nltk.download('punkt')
-from transformers import BertTokenizer
+from transformers import AutoTokenizer
 from nltk.probability import FreqDist
 import math
 import pandas as pd
 import re
 from typing import Dict, List
-from split_words import Splitter
+import os
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
-# Load the model's tokenizer
-pretrained_weights = 'deepset/gbert-large'
-tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
-
+# Load the smallest GBERT tokenizer
+tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
 
 def calculate_shannon_entropy(token_list):
     """Calculates the Shannon entropy of a given text."""
@@ -35,17 +35,26 @@ def calculate_gunning_fog_index(text, token_list):
 class TextQualityAnalyzer:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
-        self.anglicisms = ['cool', 'nice', 'fancy', 'update', 'queen', 'hollywood']
         self.complex_word_threshold = 3
-        self.splitter = Splitter()
-        self.compound_markers = {
-            'linking_elements': ['s', 'es', 'n', 'en', 'er', 'e'],
-           'common_heads': ['stelle', 'haus', 'zeit', 'raum', 'mann', 'frau', 'kind'],
-           'common_modifiers': ['haupt', 'grund', 'zeit', 'hand', 'land']
-        }
-        self.konfixes = ['tragi', 'komödie', 'bio', 'geo', 'phil', 'tele', 'therm', 'graph',
-        'phon', 'log', 'path', 'psych', 'trag', 'kom', 'techno', 'haupt',
-        'dar', 'stell']
+
+        # Initialize Vertex AI and Gemini model
+        try:
+            project_id = os.getenv("lewagon-batch672")
+            vertexai.init(project=project_id, location="us-central1")
+
+            # Updated initialization with generation config
+            self.gemini_model = GenerativeModel(
+                model_name="gemini-1.5-flash-002",
+                generation_config={
+                    "temperature": 0,     # Most deterministic output
+                    "top_k": 1,          # Only most probable token
+                    "top_p": 0.1,        # Highest probability tokens
+                    "max_output_tokens": 1024
+                }
+            )
+        except Exception as e:
+            st.error(f"Error initializing Vertex AI: {str(e)}")
+            self.gemini_model = None
 
     def analyze_text(self, text: str) -> Dict:
         tokens = self.tokenizer.tokenize(text)
@@ -69,7 +78,7 @@ class TextQualityAnalyzer:
             self.check_gender_language(text),
             self.check_anglicisms(text),
             self.check_sentence_length(text),
-            self.check_compounds(text)  # Added compound check
+            self.analyze_compounds_with_gemini(text)  # Added compound check
         ]
 
     def check_text_length(self, token_count: int) -> Dict:
@@ -113,13 +122,40 @@ class TextQualityAnalyzer:
         }
 
     def check_anglicisms(self, text: str) -> Dict:
-        found = [word for word in self.anglicisms if word.lower() in text.lower()]
-        return {
-            "name": "Anglizismen",
-            "passed": len(found) == 0,
-            "message": f"Found anglicisms: {', '.join(found) if found else 'None'}",
-            "requirement": "Avoid unnecessary anglicisms"
-        }
+        """Analyzes anglicisms using Gemini model"""
+        try:
+            prompt = f"""
+            Analyze the following German text for anglicisms (English words or phrases used in German).
+            For each anglicism found:
+            1. Identify the anglicism
+            2. Explain why it's an anglicism
+            3. Suggest a German alternative
+            4. Enter Paragrah before listing next anglicism
+
+            Text: {text}
+
+            Format the response in German as:
+            ### Gefundene Anglizismen:
+            1. [Anglizismus]
+            - Erklärung: [Warum es ein Anglizismus ist]
+            - Alternative: [Deutsche Alternative]
+
+            If no anglicisms are found, respond with: "Keine Anglizismen gefunden"
+            """
+            response = self.gemini_model.generate_content(prompt)
+            return {
+                "name": "Anglizismen",
+                "passed": "Keine Anglizismen gefunden" in response.text,
+                "message": response.text,
+                "requirement": "Avoid unnecessary anglicisms"
+            }
+        except Exception as e:
+            return {
+                "name": "Anglizismen",
+                "passed": True,
+                "message": f"Error in analysis: {str(e)}",
+                "requirement": "Avoid unnecessary anglicisms"
+            }
 
     def check_sentence_length(self, text: str) -> Dict:
         sentences = [s.strip() for s in text.split('.') if s.strip()]
@@ -130,81 +166,6 @@ class TextQualityAnalyzer:
             "message": f"Found {len(long_sentences)} sentences longer than 20 words",
             "requirement": "Sentences should not exceed 20 words"
         }
-
-    def check_compounds(self, text: str) -> Dict:
-        """Analyzes compound words in the text"""
-        # Bereinige Text und teile in Wörter
-        words = [re.sub(r'[.,!?]', '', w) for w in text.split()]
-        potential_compounds = []
-
-        for word in words:
-            # Überspringe zu kurze Wörter und Wörter mit Bindestrich
-            if len(word) < 8 or '-' in word:  # Mindestlänge auf 8 reduziert
-                continue
-
-            # BERT Tokenisierung
-            tokens = self.tokenizer.tokenize(word)
-
-            # Prüfe auf spezielle Fälle wie "Tragikomödie"
-            if 'tragikomödie' in word.lower():
-                compound_info = {
-                    'word': word,
-                    'tokens': tokens,
-                    'type': "Konfixkompositum (Tragikomödie)",
-                    'split_components': {
-                        'probability': 1.0,
-                        'parts': ['Tragi', 'komödie']
-                    }
-                }
-                potential_compounds.append(compound_info)
-                continue
-
-            # Prüfe auf normale Komposita durch BERT-Tokenisierung
-            if len(tokens) > 1:
-                # Filtere ##-Tokens und leere Strings
-                clean_tokens = [t.replace('##', '') for t in tokens if t and not t.startswith('##')]
-                if len(clean_tokens) > 1:  # Mindestens zwei Teile
-                    compound_info = {
-                        'word': word,
-                        'tokens': clean_tokens,
-                        'type': self._determine_compound_type(word),
-                        'split_components': {
-                            'probability': 1.0,
-                            'parts': clean_tokens
-                        }
-                    }
-                    potential_compounds.append(compound_info)
-
-        return {
-            "name": "Zusammengesetzte Wörter",
-            "passed": True,
-            "message": f"Found compounds: {', '.join(c['word'] for c in potential_compounds) if potential_compounds else 'None'}",
-            "compounds": potential_compounds,
-            "requirement": "Analysis of German compound words"
-        }
-
-    def _determine_compound_type(self, word: str) -> str:
-        """Determines the type of compound word."""
-        word_lower = word.lower()
-
-        # Prüfe auf spezielle Fälle
-        if 'tragikomödie' in word_lower:
-            return "Konfixkompositum (Tragikomödie)"
-
-        # Prüfe auf Konfixe
-        konfix_count = sum(1 for konfix in self.konfixes if konfix in word_lower)
-
-        if konfix_count >= 2:
-            return "Konfixkompositum"
-        elif konfix_count == 1:
-            return "Konfix-Compound"
-        else:
-            return "Regular Compound"
-
-    def _split_compound(self, word: str) -> List[str]:
-        """Splits a compound word into its components"""
-        tokens = self.tokenizer.tokenize(word)
-        return [token.replace('##', '') for token in tokens]
 
     def display_tokenized_sentences(self, tokens: List[str]) -> List[List[str]]:
         sentences = []
@@ -221,6 +182,41 @@ class TextQualityAnalyzer:
 
         return sentences
 
+    def analyze_compounds_with_gemini(self, text: str) -> Dict:
+        try:
+            prompt = f"""
+            Analyze the following German text for compound words (Komposita).
+            For each compound word found:
+            1. Identify if it's a regular compound (Kompositum) or Konfixkompositum
+            2. Break down its components
+            3. Explain its formation and meaning in German
+            4. Suggest simpler alternatives if applicable
+            5. Enter Paragrah before listing next result
+
+            Text: {text}
+
+            Format the response in German as:
+            ### Gefundene Komposita:
+            1. [Wort + (Reguläres Kompositum/Konfixkompositum)]
+            - Komponenten: [Teil1 + Teil2 (+ Teil3 wenn vorhanden)]
+            - Alternative Formulierung: [Einfachere Alternative, falls möglich oder Komponenten voll auschreiben und mit Bindesstrich verbinden]
+
+
+
+            If no compounds are found, respond with: "Keine Komposita gefunden"
+            """
+
+            response = self.gemini_model.generate_content(prompt)
+            return {
+                "has_compounds": "Keine Komposita gefunden" not in response.text,
+                "analysis": response.text
+            }
+        except Exception as e:
+            return {
+                "has_compounds": False,
+                "analysis": f"Error analyzing compounds: {str(e)}"
+            }
+
 def main():
     st.title('GBert Text Quality Analyzer')
     analyzer = TextQualityAnalyzer(tokenizer)
@@ -229,7 +225,12 @@ def main():
 
     if st.button('Analyze Text', key="analyze_button"):
         if input_text.strip():
+            # Make single API call and store results
             analysis = analyzer.analyze_text(input_text)
+            gemini_analysis = analyzer.analyze_compounds_with_gemini(input_text)
+
+            # Store Gemini analysis result in the main analysis dictionary
+            analysis['gemini_analysis'] = gemini_analysis
 
             # Display tokenized sentences
             st.subheader("Tokenized Sentences")
@@ -298,24 +299,8 @@ def main():
             # Anglicisms Check
             with st.expander(f"Anglizismen - {'✅' if analysis['quality_checks'][4]['passed'] else '❌'}"):
                 st.write("**Required:** Avoid unnecessary anglicisms")
-                found = [word for word in analyzer.anglicisms if word.lower() in input_text.lower()]
-                if found:
-                    st.write(f"\n⚠️ **Issues Found:** ({len(found)} instances)")
-                    for i, word in enumerate(found, 1):
-                        st.write(f"{i}. Found anglicism: \"{word}\"")
-                    st.write("\n💡 **Recommendation:**")
-                    replacements = {
-                        'cool': 'toll/gut/prima',
-                        'nice': 'schön/nett',
-                        'fancy': 'elegant/schick',
-                        'update': 'Aktualisierung',
-                        'queen': 'Königin',
-                        'hollywood': 'Filmstudio'
-                    }
-                    st.write("Replace with German alternatives:")
-                    for word in found:
-                        if word.lower() in replacements:
-                            st.write(f"- Replace \"{word}\" with \"{replacements[word.lower()]}\"")
+                anglicism_check = analysis['quality_checks'][4]
+                st.markdown(anglicism_check['message'])
 
             # Information Density Check
             with st.expander(f"Informationsdichte - {'✅' if 4.5 <= analysis['entropy'] <= 7.0 else '❌'}"):
@@ -353,25 +338,9 @@ def main():
                     st.write("- Use more precise vocabulary")
                     st.write("- Include more complex concepts")
 
-            # Compound Word Check
-            with st.expander(f"Zusammengesetzte Wörter - {'✅' if not analysis['quality_checks'][6]['compounds'] else '❌'}"):
-                st.write("**Required:** Analysis of German compound words")
-                compound_check = analysis['quality_checks'][6]
-                compounds = compound_check.get('compounds', [])
-
-                if compounds:
-                    st.write(f"\n⚠️ **Gefundene Komposita:** ({len(compounds)} instances)")
-                    for i, compound in enumerate(compounds, 1):
-                        st.write(f"\n{i}. **{compound['word']}**")
-                        st.write(f"**Typ:** {compound['type']}")
-                        st.write("**Zerlegung:**")
-                        st.write(f"- Komponenten: {' + '.join(compound['tokens'])}")
-
-                        if compound['type'] == "Konfixkompositum":
-                            st.write("💡 **Empfehlung:** Prüfen Sie, ob eine einfachere Alternative möglich ist.")
-                else:
-                    st.write("✅ Keine Komposita gefunden.")
-
+            # Display Gemini analysis using stored result
+            with st.expander(f"KI-Analyse der Komposita - {'✅' if 'Keine Komposita gefunden' in analysis['gemini_analysis']['analysis'] else '❌'}"):
+                st.markdown(analysis['gemini_analysis']['analysis'])
         else:
             st.warning("Please enter some text to analyze.")
 
