@@ -54,13 +54,24 @@ def calculate_gunning_fog_index(text, token_list):
     fog_index = 0.4 * ((len(token_list) / sentences) + (100 * complex_words / len(token_list)))
     return fog_index
 
+
+@st.cache_data
+def cached_analyze_text(_analyzer, text: str) -> Dict:
+    return _analyzer.analyze_text(text)
+
 class TextQualityAnalyzer:
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self.complex_word_threshold = 3
         self.gemini_model = initialize_gemini()
 
-    @st.cache_data
+class TextQualityAnalyzer:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.complex_word_threshold = 3
+        self.gemini_model = initialize_gemini()
+
+
     def analyze_text(self, text: str) -> Dict:
         try:
             tokens = self.tokenizer.tokenize(text)
@@ -230,7 +241,6 @@ class TextQualityAnalyzer:
 def main():
     st.title('GBert Text Quality Analyzer')
     analyzer = TextQualityAnalyzer(tokenizer)
-
     input_text = st.text_area('Enter your text here:', height=200, key="input_text_area")
 
     if st.button('Analyze Text', key="analyze_button"):
@@ -240,21 +250,28 @@ def main():
 
         try:
             with st.spinner('Analyzing text...'):
+                # Store the analysis result in a variable
                 analysis = analyzer.analyze_text(input_text)
-                if analysis:
-                    display_results(analysis)
-                else:
+
+                if analysis is None:
                     st.error("Analysis failed. Please try again.")
+                    return
+
+                # Display tokenized sentences only if analysis was successful
+                st.subheader("Tokenized Sentences")
+                sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
+
+                # Display the rest of your analysis results
+                for i, sentence in enumerate(sentences, 1):
+                    with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
+                        st.write(f"**Tokens:** {' '.join(sentence)}")
+                        st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
+
+                # Display quality checks
+                display_results(analysis)
+
         except Exception as e:
             st.error(f"An error occurred during analysis: {str(e)}")
-
-            # Display tokenized sentences
-            st.subheader("Tokenized Sentences")
-            sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
-            for i, sentence in enumerate(sentences, 1):
-                with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
-                    st.write(f"**Tokens:** {' '.join(sentence)}")
-                    st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
 
             # Display quality checks
             st.subheader("Quality Analysis Results")
