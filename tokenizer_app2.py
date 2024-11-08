@@ -7,7 +7,6 @@ import pandas as pd
 import re
 from typing import Dict, List
 import os
-from google.cloud import aiplatform
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
@@ -16,18 +15,14 @@ tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
 
 # Cache the model initialization
 @st.cache_resource
+@st.cache_resource
 def initialize_gemini():
     try:
-        # Set your project ID directly
-        os.environ["GOOGLE_CLOUD_PROJECT"] = "lewagon-batch672"
-
-        # Initialize vertexai with explicit project ID
         vertexai.init(
             project="lewagon-batch672",
             location="us-central1"
         )
-
-        return GenerativeModel(
+        model = GenerativeModel(
             model_name="gemini-1.5-flash-002",
             generation_config={
                 "temperature": 0,
@@ -36,8 +31,9 @@ def initialize_gemini():
                 "max_output_tokens": 1024
             }
         )
+        return model
     except Exception as e:
-        st.error(f"Error initializing Vertex AI: {str(e)}")
+        st.error(f"Failed to initialize Vertex AI: {str(e)}")
         return None
 
 def calculate_shannon_entropy(token_list):
@@ -64,19 +60,24 @@ class TextQualityAnalyzer:
         self.complex_word_threshold = 3
         self.gemini_model = initialize_gemini()
 
+    @st.cache_data
     def analyze_text(self, text: str) -> Dict:
-        tokens = self.tokenizer.tokenize(text)
-        token_count = len(tokens)
-        entropy = calculate_shannon_entropy(tokens)
-        fog_index = calculate_gunning_fog_index(text, tokens)
+        try:
+            tokens = self.tokenizer.tokenize(text)
+            token_count = len(tokens)
+            entropy = calculate_shannon_entropy(tokens)
+            fog_index = calculate_gunning_fog_index(text, tokens)
 
-        return {
-            "tokens": tokens,
-            "token_count": token_count,
-            "entropy": entropy,
-            "fog_index": fog_index,
-            "quality_checks": self.run_quality_checks(text, token_count, entropy, fog_index)
-        }
+            return {
+                "tokens": tokens,
+                "token_count": token_count,
+                "entropy": entropy,
+                "fog_index": fog_index,
+                "quality_checks": self.run_quality_checks(text, token_count, entropy, fog_index)
+            }
+        except Exception as e:
+            st.error(f"Analysis failed: {str(e)}")
+            return None
 
     def run_quality_checks(self, text: str, token_count: int, entropy: float, fog_index: float) -> List[Dict]:
         return [
@@ -191,6 +192,7 @@ class TextQualityAnalyzer:
         return sentences
 
     def analyze_compounds_with_gemini(self, text: str) -> Dict:
+
         try:
             prompt = f"""
             Analyze the following German text for compound words (Komposita).
@@ -232,13 +234,19 @@ def main():
     input_text = st.text_area('Enter your text here:', height=200, key="input_text_area")
 
     if st.button('Analyze Text', key="analyze_button"):
-        if input_text.strip():
-            # Make single API call and store results
-            analysis = analyzer.analyze_text(input_text)
-            gemini_analysis = analyzer.analyze_compounds_with_gemini(input_text)
+        if not input_text.strip():
+            st.warning("Please enter some text to analyze.")
+            return
 
-            # Store Gemini analysis result in the main analysis dictionary
-            analysis['gemini_analysis'] = gemini_analysis
+        try:
+            with st.spinner('Analyzing text...'):
+                analysis = analyzer.analyze_text(input_text)
+                if analysis:
+                    display_results(analysis)
+                else:
+                    st.error("Analysis failed. Please try again.")
+        except Exception as e:
+            st.error(f"An error occurred during analysis: {str(e)}")
 
             # Display tokenized sentences
             st.subheader("Tokenized Sentences")
