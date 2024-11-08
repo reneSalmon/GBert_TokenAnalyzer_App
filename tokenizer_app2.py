@@ -1,6 +1,5 @@
 import streamlit as st
 import nltk
-nltk.download('punkt')
 from transformers import AutoTokenizer
 from nltk.probability import FreqDist
 import math
