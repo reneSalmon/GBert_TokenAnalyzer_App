@@ -13,8 +13,7 @@ from vertexai.generative_models import GenerativeModel
 # Load the smallest GBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
 
-# Cache the model initialization
-@st.cache_resource
+# Cache the model initializatio
 @st.cache_resource
 def initialize_gemini():
     try:
@@ -238,6 +237,22 @@ class TextQualityAnalyzer:
                 "analysis": f"Error analyzing compounds: {str(e)}"
             }
 
+def display_results(analysis: Dict):
+    # Display tokenized sentences
+    st.subheader("Tokenized Sentences")
+    sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
+    for i, sentence in enumerate(sentences, 1):
+        with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
+            st.write(f"**Tokens:** {' '.join(sentence)}")
+            st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
+
+    # Display quality checks
+    st.subheader("Quality Analysis Results")
+    for check in analysis['quality_checks']:
+        with st.expander(f"{check['name']} - {'✅' if check['passed'] else '❌'}"):
+            st.write(f"**Requirement:** {check['requirement']}")
+            st.write(f"**Result:** {check['message']}")
+
 def main():
     st.title('GBert Text Quality Analyzer')
     analyzer = TextQualityAnalyzer(tokenizer)
@@ -250,48 +265,31 @@ def main():
 
         try:
             with st.spinner('Analyzing text...'):
-                # Store the analysis result in a variable
+                # Make single API call and store results
                 analysis = analyzer.analyze_text(input_text)
-
                 if analysis is None:
                     st.error("Analysis failed. Please try again.")
                     return
 
-                # Display tokenized sentences only if analysis was successful
+                # Add Gemini analysis directly to the analysis dictionary
+                analysis['gemini_analysis'] = analyzer.analyze_compounds_with_gemini(input_text)
+
+                # Display tokenized sentences
                 st.subheader("Tokenized Sentences")
                 sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
-
-                # Display the rest of your analysis results
                 for i, sentence in enumerate(sentences, 1):
                     with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
                         st.write(f"**Tokens:** {' '.join(sentence)}")
                         st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
 
                 # Display quality checks
-                display_results(analysis)
+                st.subheader("Quality Analysis Results")
 
-        except Exception as e:
-            st.error(f"An error occurred during analysis: {str(e)}")
+                # Text Length Check
+                with st.expander(f"Textlänge - {'✅' if 50 <= analysis['token_count'] <= 256 else '❌'}"):
+                    st.write(f"**Current:** {analysis['token_count']} tokens")
+                    st.write("**Required:** 50-256 tokens (optimal: 60-140)")
 
-            # Display quality checks
-            st.subheader("Quality Analysis Results")
-
-            # Text Length Check
-            with st.expander(f"Textlänge - {'✅' if 50 <= analysis['token_count'] <= 256 else '❌'}"):
-                st.write(f"**Current:** {analysis['token_count']} tokens")
-                st.write("**Required:** 50-256 tokens (optimal: 60-140)")
-                if analysis['token_count'] < 50:
-                    st.write(f"⚠️ **Issue:** Text is too short ({analysis['token_count']} tokens)")
-                    st.write("💡 **Recommendation:**")
-                    st.write("- Add more relevant details or context")
-                    st.write("- Include background information")
-                    st.write("- Expand on key points")
-                elif analysis['token_count'] > 256:
-                    st.write(f"⚠️ **Issue:** Text is too long ({analysis['token_count']} tokens)")
-                    st.write("💡 **Recommendation:**")
-                    st.write("- Remove redundant information")
-                    st.write("- Split into multiple texts")
-                    st.write("- Focus on essential information")
 
             # Sentence Length Check
             with st.expander(f"Satzlänge - {'✅' if analysis['quality_checks'][5]['passed'] else '❌'}"):
@@ -371,11 +369,14 @@ def main():
                     st.write("- Use more precise vocabulary")
                     st.write("- Include more complex concepts")
 
+
             # Display Gemini analysis using stored result
-            with st.expander(f"KI-Analyse der Komposita - {'✅' if 'Keine Komposita gefunden' in analysis['gemini_analysis']['analysis'] else '❌'}"):
-                st.markdown(analysis['gemini_analysis']['analysis'])
-        else:
-            st.warning("Please enter some text to analyze.")
+            if 'gemini_analysis' in analysis and analysis['gemini_analysis']:
+                with st.expander(f"KI-Analyse der Komposita - {'✅' if 'Keine Komposita gefunden' in analysis['gemini_analysis'].get('analysis', '') else '❌'}"):
+                    st.markdown(analysis['gemini_analysis'].get('analysis', 'Analysis not available'))
+
+        except Exception as e:
+            st.error(f"An error occurred during analysis: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+     main()
