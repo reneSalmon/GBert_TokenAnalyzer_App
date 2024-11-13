@@ -10,6 +10,11 @@ import os
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
+
+# Access secrets
+credentials = st.secrets["gcp_service_account"]
+
+
 # Load the smallest GBERT tokenizer
 tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
 
