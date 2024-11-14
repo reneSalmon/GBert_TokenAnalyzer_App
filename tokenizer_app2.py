@@ -1,22 +1,36 @@
 import streamlit as st
+
+try:
+    from transformers import AutoTokenizer
+    from nltk.probability import FreqDist
+    import vertexai
+except ImportError as e:
+    st.error(f"Required packages are missing. Please check requirements.txt")
+    st.stop()
+
 import nltk
-from transformers import AutoTokenizer
-from nltk.probability import FreqDist
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
 import math
 import pandas as pd
 import re
 from typing import Dict, List
 import os
-import vertexai
 from vertexai.generative_models import GenerativeModel
 
 
 # Access secrets
+
 credentials = st.secrets["gcp_service_account"]
 
 
 # Load the smallest GBERT tokenizer
-tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
+@st.cache_resource
+def load_tokenizer():
+    return AutoTokenizer.from_pretrained("deepset/gbert-base")
 
 # Cache the model initializatio
 @st.cache_resource
