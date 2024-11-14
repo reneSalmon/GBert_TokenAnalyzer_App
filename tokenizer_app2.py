@@ -21,7 +21,7 @@ import os
 from vertexai.generative_models import GenerativeModel
 
 # Access secrets
-credentials = st.secrets["gcp_service_account"]
+#credentials = st.secrets["gcp_service_account"]
 
 @st.cache_resource
 def initialize_gemini():
@@ -134,24 +134,17 @@ class TextQualityAnalyzer:
         }
 
     def check_anglicisms(self, text: str) -> Dict:
+        if not self.gemini_model:
+            return {
+                "name": "Anglizismen",
+                "passed": True,
+                "message": "Gemini model not available. Skipping anglicisms check.",
+                "requirement": "Avoid unnecessary anglicisms"
+            }
+
         try:
-            prompt = """
-            Analyze the following German text for anglicisms (English words or phrases used in German).
-            For each anglicism found:
-            1. Identify the anglicism
-            2. Explain why it's an anglicism
-            3. Suggest a German alternative
-            4. Enter Paragraph before listing next anglicism
-
-            Text: {text}
-
-            Format the response in German as:
-            ### Gefundene Anglizismen:
-            1. [Anglizismus]
-               - Erklärung: [Warum es ein Anglizismus ist]
-               - Alternative: [Deutsche Alternative]
-
-            If no anglicisms are found, respond with: "Keine Anglizismen gefunden"
+            prompt = f"""
+            Analyze the following German text for anglicisms...
             """
             response = self.gemini_model.generate_content(prompt)
             return {
@@ -191,35 +184,32 @@ class TextQualityAnalyzer:
         return sentences
 
     def analyze_compounds_with_gemini(self, text: str) -> Dict:
+        if not self.gemini_model:
+            return {
+                "name": "Komposita",
+                "passed": True,
+                "message": "Gemini model not available",
+                "requirement": "Analyze compound words"
+            }
+
         try:
-            prompt = """
+            prompt = f"""
             Analyze the following German text for compound words (Komposita).
-            For each compound word found:
-            1. Identify if it's a regular compound (Kompositum) or Konfixkompositum
-            2. Break down its components
-            3. Explain its formation and meaning in German
-            4. Suggest simpler alternatives if applicable
-            5. Enter Paragraph before listing next result
-
             Text: {text}
-
-            Format the response in German as:
-            ### Gefundene Komposita:
-            1. [Wort + (Reguläres Kompositum/Konfixkompositum)]
-               - Komponenten: [Teil1 + Teil2 (+ Teil3 wenn vorhanden)]
-               - Alternative Formulierung: [Einfachere Alternative, falls möglich oder Komponenten voll auschreiben und mit Bindesstrich verbinden]
-
-            If no compounds are found, respond with: "Keine Komposita gefunden"
             """
             response = self.gemini_model.generate_content(prompt)
             return {
-                "has_compounds": "Keine Komposita gefunden" not in response.text,
-                "analysis": response.text
+                "name": "Komposita",
+                "passed": "Keine Komposita gefunden" in response.text,
+                "message": response.text,
+                "requirement": "Analyze compound words"
             }
         except Exception as e:
             return {
-                "has_compounds": False,
-                "analysis": f"Error analyzing compounds: {str(e)}"
+                "name": "Komposita",
+                "passed": True,
+                "message": f"Error in analysis: {str(e)}",
+                "requirement": "Analyze compound words"
             }
 
 def display_results(analyzer: TextQualityAnalyzer, analysis: Dict):
@@ -240,7 +230,8 @@ def main():
     st.title('GBert Text Quality Analyzer')
 
     try:
-        analyzer = TextQualityAnalyzer()
+        analyzer = TextQualityAnalyzer()  # Create without tokenizer parameter
+
         input_text = st.text_area('Enter your text here:', height=200, key="input_text_area")
 
         if st.button('Analyze Text', key="analyze_button"):
