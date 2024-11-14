@@ -83,28 +83,23 @@ def main():
     st.title('GBert Text Quality Analyzer')
 
     try:
-        analyzer = TextQualityAnalyzer()
-    except Exception as e:
-        st.error(f"Failed to initialize analyzer: {str(e)}")
-        st.stop()
+        analyzer = TextQualityAnalyzer()  # No tokenizer parameter needed
 
-    def analyze_text(self, text: str) -> Dict:
-        try:
-            tokens = self.tokenizer.tokenize(text)
-            token_count = len(tokens)
-            entropy = calculate_shannon_entropy(tokens)
-            fog_index = calculate_gunning_fog_index(text, tokens)
+        input_text = st.text_area('Enter your text here:', height=200, key="input_text_area")
 
-            return {
+        if st.button('Analyze Text', key="analyze_button"):
+            if not input_text.strip():
+                st.warning("Please enter some text to analyze.")
+                return {
                 "tokens": tokens,
                 "token_count": token_count,
                 "entropy": entropy,
                 "fog_index": fog_index,
                 "quality_checks": self.run_quality_checks(text, token_count, entropy, fog_index)
             }
-        except Exception as e:
-            st.error(f"Analysis failed: {str(e)}")
-            return None
+    except Exception as e:
+        st.error(f"Analysis failed: {str(e)}")
+        return None
 
     def run_quality_checks(self, text: str, token_count: int, entropy: float, fog_index: float) -> List[Dict]:
         return [
@@ -254,21 +249,21 @@ def main():
                 "analysis": f"Error analyzing compounds: {str(e)}"
             }
 
-def display_results(analysis: Dict):
-    # Display tokenized sentences
-    st.subheader("Tokenized Sentences")
-    sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
-    for i, sentence in enumerate(sentences, 1):
-        with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
-            st.write(f"**Tokens:** {' '.join(sentence)}")
-            st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
+    def display_results(analysis: Dict):
+        # Display tokenized sentences
+        st.subheader("Tokenized Sentences")
+        sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
+        for i, sentence in enumerate(sentences, 1):
+            with st.expander(f"Sentence {i} ({len(sentence)} tokens)"):
+                st.write(f"**Tokens:** {' '.join(sentence)}")
+                st.write(f"**Word count:** {len([t for t in sentence if not t.startswith('##')])}")
 
-    # Display quality checks
-    st.subheader("Quality Analysis Results")
-    for check in analysis['quality_checks']:
-        with st.expander(f"{check['name']} - {'✅' if check['passed'] else '❌'}"):
-            st.write(f"**Requirement:** {check['requirement']}")
-            st.write(f"**Result:** {check['message']}")
+        # Display quality checks
+        st.subheader("Quality Analysis Results")
+        for check in analysis['quality_checks']:
+            with st.expander(f"{check['name']} - {'✅' if check['passed'] else '❌'}"):
+                st.write(f"**Requirement:** {check['requirement']}")
+                st.write(f"**Result:** {check['message']}")
 
 def main():
     st.title('GBert Text Quality Analyzer')
