@@ -5,3 +5,4 @@ nltk>=3.8.1
 pandas>=2.0.0
 google-cloud-aiplatform>=1.25.0
 vertexai
+google-auth
