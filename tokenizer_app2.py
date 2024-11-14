@@ -27,11 +27,6 @@ from vertexai.generative_models import GenerativeModel
 credentials = st.secrets["gcp_service_account"]
 
 
-# Load the smallest GBERT tokenizer
-@st.cache_resource
-def load_tokenizer():
-    return AutoTokenizer.from_pretrained("deepset/gbert-base")
-
 # Cache the model initializatio
 @st.cache_resource
 def initialize_gemini():
@@ -78,17 +73,20 @@ def cached_analyze_text(_analyzer, text: str) -> Dict:
     return _analyzer.analyze_text(text)
 
 class TextQualityAnalyzer:
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
+    def __init__(self):
+        # Initialize tokenizer inside the class
+        self.tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
         self.complex_word_threshold = 3
         self.gemini_model = initialize_gemini()
 
-class TextQualityAnalyzer:
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-        self.complex_word_threshold = 3
-        self.gemini_model = initialize_gemini()
+def main():
+    st.title('GBert Text Quality Analyzer')
 
+    try:
+        analyzer = TextQualityAnalyzer()
+    except Exception as e:
+        st.error(f"Failed to initialize analyzer: {str(e)}")
+        st.stop()
 
     def analyze_text(self, text: str) -> Dict:
         try:
