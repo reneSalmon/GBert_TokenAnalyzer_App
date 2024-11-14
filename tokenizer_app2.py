@@ -73,11 +73,27 @@ def cached_analyze_text(_analyzer, text: str) -> Dict:
     return _analyzer.analyze_text(text)
 
 class TextQualityAnalyzer:
-    def __init__(self):
-        # Initialize tokenizer inside the class
+    def __init__(self):  # Remove tokenizer parameter
         self.tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
         self.complex_word_threshold = 3
         self.gemini_model = initialize_gemini()
+
+    def analyze_text(self, text: str) -> Dict:
+        try:
+            tokens = self.tokenizer.tokenize(text)
+            token_count = len(tokens)
+            entropy = calculate_shannon_entropy(tokens)
+            fog_index = calculate_gunning_fog_index(text, tokens)
+            return {
+                "tokens": tokens,
+                "token_count": token_count,
+                "entropy": entropy,
+                "fog_index": fog_index,
+                "quality_checks": self.run_quality_checks(text, token_count, entropy, fog_index)
+            }
+        except Exception as e:
+            st.error(f"Analysis failed: {str(e)}")
+            return None
 
 def main():
     st.title('GBert Text Quality Analyzer')
@@ -90,16 +106,14 @@ def main():
         if st.button('Analyze Text', key="analyze_button"):
             if not input_text.strip():
                 st.warning("Please enter some text to analyze.")
-                return {
-                "tokens": tokens,
-                "token_count": token_count,
-                "entropy": entropy,
-                "fog_index": fog_index,
-                "quality_checks": self.run_quality_checks(text, token_count, entropy, fog_index)
-            }
+                return
+
+            with st.spinner('Analyzing text...'):
+                analysis = analyzer.analyze_text(input_text)
+                if analysis:
+                    display_results(analyzer, analysis)
     except Exception as e:
-        st.error(f"Analysis failed: {str(e)}")
-        return None
+        st.error(f"An error occurred: {str(e)}")
 
     def run_quality_checks(self, text: str, token_count: int, entropy: float, fog_index: float) -> List[Dict]:
         return [
