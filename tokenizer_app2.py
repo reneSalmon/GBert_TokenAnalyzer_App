@@ -73,7 +73,7 @@ def cached_analyze_text(_analyzer, text: str) -> Dict:
     return _analyzer.analyze_text(text)
 
 class TextQualityAnalyzer:
-    def __init__(self):  # Remove tokenizer parameter
+    def __init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-base")
         self.complex_word_threshold = 3
         self.gemini_model = initialize_gemini()
@@ -112,6 +112,7 @@ def main():
                 analysis = analyzer.analyze_text(input_text)
                 if analysis:
                     display_results(analyzer, analysis)
+
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
 
@@ -263,7 +264,7 @@ def main():
                 "analysis": f"Error analyzing compounds: {str(e)}"
             }
 
-    def display_results(analysis: Dict):
+    def display_results(analyzer, analysis: Dict):
         # Display tokenized sentences
         st.subheader("Tokenized Sentences")
         sentences = analyzer.display_tokenized_sentences(analysis['tokens'])
